@@ -8,29 +8,29 @@ API = os.getenv("API_URL", "http://localhost:8000").rstrip("/")
 
 def safe_request(method, url, **kwargs):
     """Wrapper for requests with automatic retries for Render's cold starts (502 error)."""
-    max_retries = 3
-    retry_delay = 5  # seconds
+    max_retries = 6  # Increased from 3 to 6
+    retry_delay = 10 # Increased from 5 to 10 seconds (Total wait: 60 seconds)
     
-    # Increase default timeout to 30s to allow Render to wake up
+    # Increase default timeout to 45s
     if 'timeout' not in kwargs:
-        kwargs['timeout'] = 30
+        kwargs['timeout'] = 45
         
     for i in range(max_retries):
         try:
             r = requests.request(method, url, **kwargs)
-            # If we get a 502/503/504, the server might be waking up
+            # If we get a 502/503/504, the server is definitely sleeping
             if r.status_code in [502, 503, 504] and i < max_retries - 1:
-                with st.spinner(f"Server is waking up (Attempt {i+1}/3)..."):
+                with st.spinner(f"Backend is waking up... please wait (Attempt {i+1}/{max_retries})"):
                     time.sleep(retry_delay)
                     continue
             return r
         except (requests.ConnectionError, requests.Timeout):
             if i < max_retries - 1:
-                with st.spinner(f"Connecting to server (Attempt {i+1}/3)..."):
+                with st.spinner(f"Connecting to backend... (Attempt {i+1}/{max_retries})"):
                     time.sleep(retry_delay)
                     continue
             raise
-    return requests.request(method, url, **kwargs)  # Final attempt
+    return requests.request(method, url, **kwargs)
 
 st.set_page_config(page_title="SecureRAG", page_icon="🔐", layout="wide")
 
