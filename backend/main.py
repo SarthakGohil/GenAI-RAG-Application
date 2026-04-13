@@ -1,5 +1,7 @@
 """SecureRAG FastAPI: JWT auth, sanitization, upload, Q&A, summarize."""
 import json
+import os
+import uvicorn
 import langsmith_setup  # noqa: F401
 from typing import Annotated
 
@@ -132,3 +134,7 @@ def get_history(user: Annotated[str, Depends(current_user)]):
 @app.get("/health")
 def health():
     return {"status": "ok", "mongo": ping_mongo(), "llm_backend": LLM_BACKEND}
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
