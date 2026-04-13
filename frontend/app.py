@@ -2,8 +2,35 @@
 import os
 import streamlit as st
 import requests
+import time
 
 API = os.getenv("API_URL", "http://localhost:8000").rstrip("/")
+
+def safe_request(method, url, **kwargs):
+    """Wrapper for requests with automatic retries for Render's cold starts (502 error)."""
+    max_retries = 3
+    retry_delay = 5  # seconds
+    
+    # Increase default timeout to 30s to allow Render to wake up
+    if 'timeout' not in kwargs:
+        kwargs['timeout'] = 30
+        
+    for i in range(max_retries):
+        try:
+            r = requests.request(method, url, **kwargs)
+            # If we get a 502/503/504, the server might be waking up
+            if r.status_code in [502, 503, 504] and i < max_retries - 1:
+                with st.spinner(f"Server is waking up (Attempt {i+1}/3)..."):
+                    time.sleep(retry_delay)
+                    continue
+            return r
+        except (requests.ConnectionError, requests.Timeout):
+            if i < max_retries - 1:
+                with st.spinner(f"Connecting to server (Attempt {i+1}/3)..."):
+                    time.sleep(retry_delay)
+                    continue
+            raise
+    return requests.request(method, url, **kwargs)  # Final attempt
 
 st.set_page_config(page_title="SecureRAG", page_icon="🔐", layout="wide")
 
@@ -53,7 +80,7 @@ if "token" not in st.session_state:
             if lu and lp:
                 with st.spinner("Authenticating…"):
                     try:
-                        r = requests.post(f"{API}/login", json={"username": lu, "password": lp}, timeout=15)
+                        r = safe_request("POST", f"{API}/login", json={"username": lu, "password": lp}, timeout=30)
                     except requests.RequestException:
                         st.error("Cannot reach API server.")
                     else:
@@ -75,14 +102,14 @@ if "token" not in st.session_state:
             if ru and rp:
                 with st.spinner("Creating account…"):
                     try:
-                        r = requests.post(f"{API}/register", json={"username": ru, "password": rp}, timeout=15)
+                        r = safe_request("POST", f"{API}/register", json={"username": ru, "password": rp}, timeout=30)
                     except requests.RequestException:
                         st.error("Cannot reach API server.")
                     else:
                         if r.status_code == 200:
                             st.success("Account created successfully! Automatically signing in...")
                             try:
-                                login_r = requests.post(f"{API}/login", json={"username": ru, "password": rp}, timeout=15)
+                                login_r = safe_request("POST", f"{API}/login", json={"username": ru, "password": rp}, timeout=30)
                                 if login_r.status_code == 200:
                                     st.session_state.token = login_r.json()["token"]
                                     st.session_state.username = ru
@@ -108,7 +135,7 @@ with st.sidebar:
     st.divider()
     if st.button("🔎 Health Check"):
         try:
-            h = requests.get(f"{API}/health", timeout=10).json()
+            h = safe_request("GET", f"{API}/health", timeout=10).json()
             st.json(h)
         except Exception as e:
             st.error(str(e))
@@ -123,7 +150,7 @@ with st.sidebar:
         # Try to load from backend
         try:
             hdrs = {"Authorization": f"Bearer {st.session_state.token}"}
-            r = requests.get(f"{API}/history", headers=hdrs, timeout=5)
+            r = safe_request("GET", f"{API}/history", headers=hdrs, timeout=10)
             if r.status_code == 200:
                 hist = r.json().get("history", [])
                 st.session_state.history = [h["question"] for h in hist][::-1]  # reverse to get oldest to newest since we append
@@ -162,7 +189,7 @@ with t1:
             ph = st.empty()
             with st.spinner("Retrieving context and thinking..."):
                 try:
-                    r = requests.post(f"{API}/query", json={"question": q}, headers=hdrs, timeout=120)
+                    r = safe_request("POST", f"{API}/query", json={"question": q}, headers=hdrs, timeout=120)
                 except requests.RequestException as e:
                     ph.error(f"Network error: {e}")
                 else:
@@ -186,7 +213,7 @@ with t2:
                 total_added = 0
                 for up in ups:
                     try:
-                        r = requests.post(f"{API}/upload", files={"file": (up.name, up.getvalue(), "application/pdf")}, headers=hdrs, timeout=300)
+                        r = safe_request("POST", f"{API}/upload", files={"file": (up.name, up.getvalue(), "application/pdf")}, headers=hdrs, timeout=300)
                     except requests.RequestException as e:
                         st.error(f"Network error for {up.name}: {str(e)}")
                     else:
@@ -207,7 +234,7 @@ with t3:
     if st.button("📊 Generate Summary", key="sum_btn", type="primary"):
         with st.spinner("Summarizing from index…"):
             try:
-                r = requests.post(f"{API}/summarize", json={"focus": focus}, headers=hdrs, timeout=120)
+                r = safe_request("POST", f"{API}/summarize", json={"focus": focus}, headers=hdrs, timeout=120)
             except requests.RequestException as e:
                 st.error(str(e))
             else:
@@ -226,7 +253,7 @@ with t4:
     if st.button("🔄 Fetch My History", type="secondary"):
         with st.spinner("Fetching logs from MongoDB..."):
             try:
-                r = requests.get(f"{API}/history", headers=hdrs, timeout=10)
+                r = safe_request("GET", f"{API}/history", headers=hdrs, timeout=10)
             except requests.RequestException:
                 st.error("Network error")
             else:
