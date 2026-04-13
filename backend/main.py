@@ -10,9 +10,10 @@ from config import DEMO_USERS_JSON, LLM_BACKEND
 from database import log_query, ping_mongo, create_user, get_user_hash, get_user_history
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.security import OAuth2PasswordBearer
-from ingest import ingest_pdf_bytes
+# Lazy import ingest and rag_pipeline inside functions to speed up startup for Render health checks
+# from ingest import ingest_pdf_bytes
+# from rag_pipeline import get_rag_chain, get_summarize_chain
 from pydantic import BaseModel, Field
-from rag_pipeline import get_rag_chain, get_summarize_chain
 from security import sanitize_input
 from passlib.context import CryptContext
 
@@ -99,6 +100,8 @@ async def upload_pdf(
     name = file.filename or "upload.pdf"
     if not name.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted")
+    
+    from ingest import ingest_pdf_bytes
     raw = await file.read()
     try:
         n = ingest_pdf_bytes(raw, name, user)
@@ -109,6 +112,7 @@ async def upload_pdf(
 
 @app.post("/query")
 def query(q: Query, user: Annotated[str, Depends(current_user)]):
+    from rag_pipeline import get_rag_chain
     clean = sanitize_input(q.question)
     if not clean.strip():
         raise HTTPException(status_code=400, detail="Empty question after sanitization")
@@ -120,6 +124,7 @@ def query(q: Query, user: Annotated[str, Depends(current_user)]):
 
 @app.post("/summarize")
 def summarize(body: SummarizeBody, user: Annotated[str, Depends(current_user)]):
+    from rag_pipeline import get_summarize_chain
     focus = sanitize_input(body.focus) or "main themes and important facts"
     # Use focus as the input query for retrieval, but keep the instruction for the LLM
     out = get_summarize_chain(user).invoke({"input": focus})
