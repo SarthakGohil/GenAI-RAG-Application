@@ -1,63 +1,50 @@
-# SecureRAG - Hugging Face Spaces Backend
+# SecureRAG Backend
 
-## Deployment Instructions
+## How to Deploy
 
-### 1. Create a New Hugging Face Space
-1. Go to [huggingface.co/new-space](https://huggingface.co/new-space)
-2. Select **Docker** → **Blank** as the SDK
-3. Give your Space a name (e.g., `securerag-backend`)
-4. Set visibility to **Public** or **Private** as needed
-5. Click **Create Space**
+### 1. Create Space
+- Go to [huggingface.co/new-space](https://huggingface.co/new-space)
+- Select **Docker** → **Blank**
+- Name: `securerag-backend`
+- Visibility: **Public**
 
-### 2. Upload Your Files
-Upload the contents of this folder (`spaces/backend/`) to your new HF Space:
-- `main.py`
-- `auth.py`
-- `config.py`
-- `database.py`
-- `ingest.py`
-- `langsmith_setup.py`
-- `llm_factory.py`
-- `rag_pipeline.py`
-- `security.py`
-- `requirements.txt`
-- `Dockerfile`
+### 2. Upload Files
+Upload these files from `spaces/backend/`:
+- main.py, auth.py, config.py, database.py, ingest.py
+- langsmith_setup.py, llm_factory.py, rag_pipeline.py
+- security.py, requirements.txt, Dockerfile
 
-### 3. Add Your Secrets (Environment Variables)
-In your HF Space settings, add these secrets:
+### 3. Add Secrets
+In Space settings add these:
 
 | Name | Value |
 |------|-------|
-| `MONGODB_URI` | Your MongoDB Atlas connection string (e.g., `mongodb+srv://user:pass@cluster.mongodb.net`) |
-| `MONGODB_DB` | `securerag` (or your preferred database name) |
-| `GROQ_API_KEY` | Your Groq API key |
-| `HF_TOKEN` | Your HuggingFace API token (for embeddings) |
-| `JWT_SECRET` | A long random string for JWT signing |
-| `LLM_BACKEND` | `groq` |
+| MONGODB_URI | Your MongoDB connection string |
+| MONGODB_DB | securerag |
+| GROQ_API_KEY | Your Groq API key |
+| HF_TOKEN | Your HuggingFace token |
+| JWT_SECRET | Any random string |
+| LLM_BACKEND | groq |
 
-### 4. MongoDB Atlas Network Access
-If your MongoDB Atlas is locked to specific IPs:
-1. Go to **MongoDB Atlas** → **Security** → **Network Access**
-2. Click **Add IP Address**
-3. Select **Allow Access from Anywhere** (0.0.0.0/0)
-4. Confirm
+### 4. MongoDB Atlas
+- Go to **Security** → **Network Access**
+- Click **Add IP Address**
+- Select **Allow Access from Anywhere**
 
-### 5. Update Your Frontend
-In your Render/Vercel frontend settings, update the `API_URL` environment variable:
-```
-API_URL=https://your-hf-space-name.hf.space
+### 5. Update main.py
+Before uploading, edit line 16 in main.py:
+```python
+"https://genai-rag-application.streamlit.app"  # replace with your streamlit url
 ```
 
-### 6. Architecture Summary
+---
+
+## Architecture
 ```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│   Frontend      │────▶│  HF Spaces       │────▶│  MongoDB Atlas  │
-│   (Render/      │     │  Backend         │     │  (Cloud DB)     │
-│    Vercel)      │◀────│  (16GB RAM!)     │◀────│                 │
-└─────────────────┘     └──────────────────┘     └─────────────────┘
+Streamlit Cloud ──▶ HF Spaces Backend ──▶ MongoDB Atlas
 ```
 
-## Why Hugging Face Spaces?
-- **16GB RAM** (vs Render's 512MB) - No more memory freezes!
-- **Persistent storage** via MongoDB Atlas - Data survives Space restarts
-- **Free forever** on Starter tier - No credit card needed
+## Why HF Spaces?
+- 16GB RAM (free)
+- No memory freezes
+- Persistent via MongoDB

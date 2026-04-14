@@ -9,14 +9,11 @@ from fastapi.security import OAuth2PasswordBearer
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-# Lazy loading is used within endpoints to ensure fast startup on Render free tier
-
 app = FastAPI(title="SecureRAG API", version="1.0.0")
 
-# Add your Streamlit URL here (and keep localhost for testing)
 origins = [
-    "http://localhost:8501", 
-    "https://genai-rag-application.streamlit.app" # REPLACE WITH YOUR REAL STREAMLIT URL
+    "http://localhost:8501",
+    "https://genai-rag-application.streamlit.app"
 ]
 
 app.add_middleware(

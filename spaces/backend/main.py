@@ -6,16 +6,28 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.security import OAuth2PasswordBearer
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-# Lazy loading is used within endpoints to ensure fast startup on Render free tier
-
 app = FastAPI(title="SecureRAG API", version="1.0.0")
+
+origins = [
+    "http://localhost:8501",
+    "https://genai-rag-application.streamlit.app"
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 oauth2 = OAuth2PasswordBearer(tokenUrl="/login")
 
 @app.get("/ping")
 def ping():
-    """Ultra-lightweight endpoint for UptimeRobot/Keep-alive."""
     return {"status": "alive"}
 
 def get_pwd_context():
@@ -44,11 +56,9 @@ def users_map() -> dict[str, str]:
 @app.post("/register")
 def register(data: LoginData):
     from database import get_user_hash, create_user
-    # Check if user already exists
     if get_user_hash(data.username) or data.username in users_map():
         raise HTTPException(status_code=400, detail="Username already registered")
     
-    # Hash password and create
     pwd_context = get_pwd_context()
     hashed = pwd_context.hash(data.password)
     success = create_user(data.username, hashed)
@@ -63,16 +73,13 @@ def login(data: LoginData):
     from database import get_user_hash
     from auth import create_token
     db_hash = get_user_hash(data.username)
-    # Check environmental dummy users as fallback
     if not db_hash:
         users = users_map()
         if data.username in users:
-            # Check if it's already a hash or plain text
             stored = users[data.username]
             is_match = False
             pwd_context = get_pwd_context()
             try:
-                # Try as hash first
                 if pwd_context.identify(stored):
                     is_match = pwd_context.verify(data.password, stored)
                 else:
@@ -120,7 +127,7 @@ async def upload_pdf(
 
 @app.post("/query")
 def query(q: Query, user: Annotated[str, Depends(current_user)]):
-    import langsmith_setup  # noqa: F401
+    import langsmith_setup
     from rag_pipeline import get_rag_chain
     from security import sanitize_input
     from database import log_query
@@ -135,21 +142,23 @@ def query(q: Query, user: Annotated[str, Depends(current_user)]):
 
 @app.post("/summarize")
 def summarize(body: SummarizeBody, user: Annotated[str, Depends(current_user)]):
-    import langsmith_setup  # noqa: F401
+    import langsmith_setup
     from rag_pipeline import get_summarize_chain
     from security import sanitize_input
     from database import log_query
     focus = sanitize_input(body.focus) or "main themes and important facts"
-    # Use focus as the input query for retrieval, but keep the instruction for the LLM
     out = get_summarize_chain(user).invoke({"input": focus})
     ans = str(out.get("answer", ""))
     log_query(user, "SUMMARIZE:" + focus[:200], ans)
     return {"summary": ans, "user": user}
+
+
 @app.get("/history")
 def get_history(user: Annotated[str, Depends(current_user)]):
     from database import get_user_history
     history = get_user_history(user)
     return {"history": history, "user": user}
+
 
 @app.get("/health")
 def health():
@@ -157,6 +166,12 @@ def health():
     from config import LLM_BACKEND
     return {"status": "ok", "mongo": ping_mongo(), "llm_backend": LLM_BACKEND}
 
+
+@app.get("/")
+def read_root():
+    return {"message": "SecureRAG Backend is running"}
+
+
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
+    port = int(os.environ.get("PORT", 7860))
     uvicorn.run(app, host="0.0.0.0", port=port)

@@ -1,4 +1,4 @@
-"""SecureRAG — premium dark-themed Streamlit client with JWT auth, PDF upload, Q&A, summarize."""
+"""SecureRAG — Streamlit client with JWT auth, PDF upload, Q&A, summarize."""
 import os
 import streamlit as st
 import requests
@@ -7,23 +7,20 @@ import time
 try:
     API = st.secrets["API_URL"].rstrip("/")
 except (FileNotFoundError, KeyError):
-    # Put your actual Hugging Face URL here as the backup
     API = "https://apun-007-securerag-backend.hf.space"
     
     
 def safe_request(method, url, **kwargs):
     """Wrapper for requests with automatic retries for Render's cold starts (502 error)."""
-    max_retries = 3 # Increased to 12 for slow cold starts
-    retry_delay = 10 # Increased to 15 seconds (Total wait: 3 minutes)
+    max_retries = 3 # 3 for slow cold starts
+    retry_delay = 20 # 20 seconds (Total wait: 1 min)
     
-    # Increase default timeout to 45s
     if 'timeout' not in kwargs:
         kwargs['timeout'] = 45
         
     for i in range(max_retries):
         try:
             r = requests.request(method, url, **kwargs)
-            # If we get a 502/503/504, the server is definitely sleeping
             if r.status_code in [502, 503, 504] and i < max_retries - 1:
                 with st.spinner(f"Backend is waking up... please wait (Attempt {i+1}/{max_retries})"):
                     time.sleep(retry_delay)
