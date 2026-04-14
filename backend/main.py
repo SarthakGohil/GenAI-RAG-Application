@@ -2,25 +2,25 @@
 import json
 import os
 import uvicorn
-import langsmith_setup  # noqa: F401
 from typing import Annotated
 
-from auth import create_token, verify_token
-from config import DEMO_USERS_JSON, LLM_BACKEND
-from database import log_query, ping_mongo, create_user, get_user_hash, get_user_history
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.security import OAuth2PasswordBearer
-# Lazy import ingest and rag_pipeline inside functions to speed up startup for Render health checks
-# from ingest import ingest_pdf_bytes
-# from rag_pipeline import get_rag_chain, get_summarize_chain
 from pydantic import BaseModel, Field
-from security import sanitize_input
-from passlib.context import CryptContext
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Lazy loading is used within endpoints to ensure fast startup on Render free tier
 
 app = FastAPI(title="SecureRAG API", version="1.0.0")
 oauth2 = OAuth2PasswordBearer(tokenUrl="/login")
+
+@app.get("/ping")
+def ping():
+    """Ultra-lightweight endpoint for UptimeRobot/Keep-alive."""
+    return {"status": "alive"}
+
+def get_pwd_context():
+    from passlib.context import CryptContext
+    return CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 class LoginData(BaseModel):
@@ -37,16 +37,19 @@ class SummarizeBody(BaseModel):
 
 
 def users_map() -> dict[str, str]:
+    from config import DEMO_USERS_JSON
     return json.loads(DEMO_USERS_JSON)
 
 
 @app.post("/register")
 def register(data: LoginData):
+    from database import get_user_hash, create_user
     # Check if user already exists
     if get_user_hash(data.username) or data.username in users_map():
         raise HTTPException(status_code=400, detail="Username already registered")
     
     # Hash password and create
+    pwd_context = get_pwd_context()
     hashed = pwd_context.hash(data.password)
     success = create_user(data.username, hashed)
     if not success:
@@ -57,6 +60,8 @@ def register(data: LoginData):
 
 @app.post("/login")
 def login(data: LoginData):
+    from database import get_user_hash
+    from auth import create_token
     db_hash = get_user_hash(data.username)
     # Check environmental dummy users as fallback
     if not db_hash:
@@ -65,6 +70,7 @@ def login(data: LoginData):
             # Check if it's already a hash or plain text
             stored = users[data.username]
             is_match = False
+            pwd_context = get_pwd_context()
             try:
                 # Try as hash first
                 if pwd_context.identify(stored):
@@ -79,6 +85,7 @@ def login(data: LoginData):
         
         raise HTTPException(status_code=401, detail="Invalid credentials")
         
+    pwd_context = get_pwd_context()
     if not pwd_context.verify(data.password, db_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
         
@@ -86,6 +93,7 @@ def login(data: LoginData):
 
 
 def current_user(token: Annotated[str, Depends(oauth2)]) -> str:
+    from auth import verify_token
     user = verify_token(token)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
@@ -112,7 +120,10 @@ async def upload_pdf(
 
 @app.post("/query")
 def query(q: Query, user: Annotated[str, Depends(current_user)]):
+    import langsmith_setup  # noqa: F401
     from rag_pipeline import get_rag_chain
+    from security import sanitize_input
+    from database import log_query
     clean = sanitize_input(q.question)
     if not clean.strip():
         raise HTTPException(status_code=400, detail="Empty question after sanitization")
@@ -124,7 +135,10 @@ def query(q: Query, user: Annotated[str, Depends(current_user)]):
 
 @app.post("/summarize")
 def summarize(body: SummarizeBody, user: Annotated[str, Depends(current_user)]):
+    import langsmith_setup  # noqa: F401
     from rag_pipeline import get_summarize_chain
+    from security import sanitize_input
+    from database import log_query
     focus = sanitize_input(body.focus) or "main themes and important facts"
     # Use focus as the input query for retrieval, but keep the instruction for the LLM
     out = get_summarize_chain(user).invoke({"input": focus})
@@ -133,11 +147,14 @@ def summarize(body: SummarizeBody, user: Annotated[str, Depends(current_user)]):
     return {"summary": ans, "user": user}
 @app.get("/history")
 def get_history(user: Annotated[str, Depends(current_user)]):
+    from database import get_user_history
     history = get_user_history(user)
     return {"history": history, "user": user}
 
 @app.get("/health")
 def health():
+    from database import ping_mongo
+    from config import LLM_BACKEND
     return {"status": "ok", "mongo": ping_mongo(), "llm_backend": LLM_BACKEND}
 
 if __name__ == "__main__":

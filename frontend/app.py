@@ -8,8 +8,8 @@ API = os.getenv("API_URL", "http://localhost:8000").rstrip("/")
 
 def safe_request(method, url, **kwargs):
     """Wrapper for requests with automatic retries for Render's cold starts (502 error)."""
-    max_retries = 12 # Increased to 12 for slow cold starts
-    retry_delay = 15 # Increased to 15 seconds (Total wait: 3 minutes)
+    max_retries = 3 # Increased to 12 for slow cold starts
+    retry_delay = 10 # Increased to 15 seconds (Total wait: 3 minutes)
     
     # Increase default timeout to 45s
     if 'timeout' not in kwargs:
