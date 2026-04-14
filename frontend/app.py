@@ -34,6 +34,18 @@ def safe_request(method, url, **kwargs):
 
 st.set_page_config(page_title="SecureRAG", page_icon="🔐", layout="wide")
 
+# Handle external cron job pings to keep BOTH frontend and backend awake
+if "nocache" in st.query_params or "keepalive" in st.query_params:
+    try:
+        # Ping backend to keep it awake too
+        requests.get(f"{API}/health", timeout=10)
+    except Exception:
+        pass
+    # If explicitly keepalive, stop rendering the heavy UI to save resources
+    if "keepalive" in st.query_params:
+        st.write("OK - Keep-alive successful")
+        st.stop()
+
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
