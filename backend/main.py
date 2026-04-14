@@ -6,11 +6,28 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.security import OAuth2PasswordBearer
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 # Lazy loading is used within endpoints to ensure fast startup on Render free tier
 
 app = FastAPI(title="SecureRAG API", version="1.0.0")
+
+# Add your Streamlit URL here (and keep localhost for testing)
+origins = [
+    "http://localhost:8501", 
+    "https://genai-rag-application.streamlit.app" # REPLACE WITH YOUR REAL STREAMLIT URL
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 oauth2 = OAuth2PasswordBearer(tokenUrl="/login")
 
 @app.get("/ping")
@@ -156,6 +173,10 @@ def health():
     from database import ping_mongo
     from config import LLM_BACKEND
     return {"status": "ok", "mongo": ping_mongo(), "llm_backend": LLM_BACKEND}
+
+@app.get("/")
+def read_root():
+    return {"message": "SecureRAG Backend is running on Hugging Face"}
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))

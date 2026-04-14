@@ -4,8 +4,13 @@ import streamlit as st
 import requests
 import time
 
-API = os.getenv("API_URL", "http://localhost:8000").rstrip("/")
-
+try:
+    API = st.secrets["API_URL"].rstrip("/")
+except (FileNotFoundError, KeyError):
+    # Put your actual Hugging Face URL here as the backup
+    API = "https://apun-007-securerag-backend.hf.space"
+    
+    
 def safe_request(method, url, **kwargs):
     """Wrapper for requests with automatic retries for Render's cold starts (502 error)."""
     max_retries = 3 # Increased to 12 for slow cold starts
