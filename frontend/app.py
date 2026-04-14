@@ -8,8 +8,8 @@ API = os.getenv("API_URL", "http://localhost:8000").rstrip("/")
 
 def safe_request(method, url, **kwargs):
     """Wrapper for requests with automatic retries for Render's cold starts (502 error)."""
-    max_retries = 6  # Increased from 3 to 6
-    retry_delay = 10 # Increased from 5 to 10 seconds (Total wait: 60 seconds)
+    max_retries = 12 # Increased to 12 for slow cold starts
+    retry_delay = 15 # Increased to 15 seconds (Total wait: 3 minutes)
     
     # Increase default timeout to 45s
     if 'timeout' not in kwargs:
@@ -34,7 +34,7 @@ def safe_request(method, url, **kwargs):
 
 st.set_page_config(page_title="SecureRAG", page_icon="🔐", layout="wide")
 
-# Handle external cron job pings to keep BOTH frontend and backend awake
+    # Handle external cron job pings to keep BOTH frontend and backend awake
 if "nocache" in st.query_params or "keepalive" in st.query_params:
     try:
         # Ping backend to keep it awake too
